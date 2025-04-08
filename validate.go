@@ -1,8 +1,9 @@
-package main 
+package main
 
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 func validateChirp(w http.ResponseWriter, r *http.Request) {
@@ -15,11 +16,17 @@ func validateChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type resValid struct {
-		Valid 	bool	`json:"valid"`
+		CleanedBody	string	`json:"cleaned_body"`
 	}
+
 	respondWithError := func(status int, message string) {
 		w.WriteHeader(status)
 		json.NewEncoder(w).Encode(resError{Error: message})
+	}
+
+	respondWithJSON := func(status int, payload interface{}) {
+		w.WriteHeader(status)	
+		json.NewEncoder(w).Encode(payload)
 	}
 
 	w.Header().Set("Content-Type", "application/json") 
@@ -36,6 +43,18 @@ func validateChirp(w http.ResponseWriter, r *http.Request) {
 		return 
 	}
 
-	json.NewEncoder(w).Encode(resValid{Valid: true})
+
+	res := cleanChirp(par.Body)
+	respondWithJSON(http.StatusOK, resValid{CleanedBody: res})
 }
 
+func cleanChirp(chirp string) string {
+	words := strings.Fields(chirp)
+	for i, word := range words {
+		word := strings.ToLower(word)
+		if word == "kerfuffle" || word == "sharbert" || word == "fornax" {
+			words[i] = "****"
+		}
+	}
+	return strings.Join(words, " ")
+}
