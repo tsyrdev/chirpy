@@ -16,6 +16,7 @@ type apiConfig struct {
 	fileserverHits 	atomic.Int32
 	dbQueries		*database.Queries	
 	platform		string
+	secret			string
 }
 
 func main() {
@@ -33,6 +34,7 @@ func main() {
 		fileserverHits: atomic.Int32{},
 		dbQueries: database.New(db),
 		platform: os.Getenv("PLATFORM"),
+		secret: os.Getenv("SECRET"),
 	}
 
 	mux := http.NewServeMux()
@@ -47,6 +49,9 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerGetAllChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerGetChirp)
+	mux.HandleFunc("POST /api/login", apiCfg.handlerLogin)
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerRefresh)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevokeRefresh)
 
 	srv := &http.Server{
 		Addr:    ":" + port,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tsyrdev/chirpy/internal/auth"
 	"github.com/tsyrdev/chirpy/internal/database"
 	"github.com/tsyrdev/chirpy/utils"
 )
@@ -74,7 +75,18 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	var params struct {
 		Body	string		`json:"body"`
-		UserID	uuid.UUID	`json:"user_id"`
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusUnauthorized, "User does not possess a login token")
+		return 
+	}
+
+	tokenUUID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusUnauthorized, "401 Unauthorized")
+		return 
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
@@ -91,7 +103,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 
 	chirp, err := cfg.dbQueries.CreateChirps(r.Context(), database.CreateChirpsParams{
 		Body:	cleanChirp,
-		UserID:	params.UserID,
+		UserID:	tokenUUID,
 	})
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Could not create the chirp: %s", err))
