@@ -21,19 +21,60 @@ type Chirp struct {
 	UserID		uuid.UUID	`json:"user_id"`
 }
 
+func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	path := r.PathValue("chirpID") 
+	chirpID, err := uuid.Parse(path)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, "Server could not parse the chirp ID")
+		return 
+	}
+
+	authHeader, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, "Server couldn't extract the authorization header")
+		return 
+	}
+
+	userID, err := auth.ValidateJWT(authHeader, cfg.secret)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, "Server couldn't validate the access token")
+		return 
+	}
+
+	dbChirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpID)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusNotFound, "Chirp could not be found")
+		return 
+	}
+	if userID != dbChirp.UserID {
+		utils.RespondWithError(w, http.StatusForbidden, "Chirp does not belong to user")
+		return 
+	}
+
+	if err := cfg.dbQueries.DeleteChirp(r.Context(), chirpID); err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, "Server couldn't delete chirp")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	path := r.PathValue("chirpID")
 	id, err := uuid.Parse(path)
 	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Server could not pass the ID")
+		utils.RespondWithError(w, http.StatusInternalServerError, "Server could not parse the chirp ID")
 		return 
 	}
 
 	dbChirp, err := cfg.dbQueries.GetChirp(r.Context(), id)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, "Could not get the Chirp")
+		return
 	}
 
 	chirp := Chirp{

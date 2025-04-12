@@ -18,6 +18,57 @@ type User struct {
 	Email		string		`json:"email"`
 }
 
+func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+
+	authHeader, err := auth.GetBearerToken(r.Header)	
+	if err != nil {
+		utils.RespondWithError(w, http.StatusUnauthorized, "User does not possess an access token")
+		return 
+	}
+
+	var params struct{
+		Password 	string	`json:"password"`
+		Email		string	`json:"email"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, "Invalid JSON")
+		return 
+	}
+
+	accessUUID, err := auth.ValidateJWT(authHeader, cfg.secret)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusServiceUnavailable, "Invalid Access Token")
+		return
+	}
+	
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, "Error hashing password")
+		return
+	}
+
+	dbUser, err := cfg.dbQueries.UpdateUser(r.Context(), database.UpdateUserParams{
+		ID: accessUUID,	
+		Email: params.Email,
+		HashedPassword: hashedPassword,
+	})
+	if err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, "Could not update user")
+		return 
+	}
+
+	response := User{
+		ID:			dbUser.ID,
+		CreatedAt:	dbUser.CreatedAt,		
+		UpdatedAt:	dbUser.UpdatedAt,	
+		Email:		dbUser.Email,		
+	}
+	utils.RespondWithJSON(w, http.StatusOK, response)
+}
+
 func (cfg *apiConfig) handlerRevokeRefresh(w http.ResponseWriter, r *http.Request) {
 	authHeader, err := auth.GetBearerToken(r.Header)	
 	if err != nil {
