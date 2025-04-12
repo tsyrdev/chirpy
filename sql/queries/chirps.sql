@@ -10,10 +10,17 @@ VALUES (
 RETURNING *; 
 
 -- name: GetAllChirps :many
-SELECT * FROM chirps; 
+SELECT *
+FROM chirps; 
+
+-- name: GetAuthorChirps :many
+SELECT * 
+FROM chirps 
+WHERE user_id = $1; 
 
 -- name: GetChirp :one
-SELECT * FROM chirps 
+SELECT *
+FROM chirps 
 WHERE id = $1;
 
 -- name: DeleteChirp :exec

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,43 +15,43 @@ import (
 )
 
 type Chirp struct {
-	ID 			uuid.UUID 	`json:"id"`
-	CreatedAt 	time.Time	`json:"created_at"`
-	UpdatedAt	time.Time	`json:"updated_at"`
-	Body		string		`json:"body"`
-	UserID		uuid.UUID	`json:"user_id"`
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 func (cfg *apiConfig) handlerDeleteChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
-	path := r.PathValue("chirpID") 
+
+	path := r.PathValue("chirpID")
 	chirpID, err := uuid.Parse(path)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, "Server could not parse the chirp ID")
-		return 
+		return
 	}
 
 	authHeader, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, "Server couldn't extract the authorization header")
-		return 
+		return
 	}
 
 	userID, err := auth.ValidateJWT(authHeader, cfg.secret)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, "Server couldn't validate the access token")
-		return 
+		return
 	}
 
 	dbChirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpID)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusNotFound, "Chirp could not be found")
-		return 
+		return
 	}
 	if userID != dbChirp.UserID {
 		utils.RespondWithError(w, http.StatusForbidden, "Chirp does not belong to user")
-		return 
+		return
 	}
 
 	if err := cfg.dbQueries.DeleteChirp(r.Context(), chirpID); err != nil {
@@ -68,7 +69,7 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(path)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, "Server could not parse the chirp ID")
-		return 
+		return
 	}
 
 	dbChirp, err := cfg.dbQueries.GetChirp(r.Context(), id)
@@ -78,11 +79,11 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chirp := Chirp{
-		ID: dbChirp.ID,
+		ID:        dbChirp.ID,
 		CreatedAt: dbChirp.CreatedAt,
 		UpdatedAt: dbChirp.UpdatedAt,
-		Body: dbChirp.Body,
-		UserID: dbChirp.UserID,
+		Body:      dbChirp.Body,
+		UserID:    dbChirp.UserID,
 	}
 	utils.RespondWithJSON(w, http.StatusOK, chirp)
 }
@@ -90,23 +91,60 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Could not get Chirps")
-		return 
-	}
+	sortParam := r.URL.Query().Get("sort") 
+	authorIDParam := r.URL.Query().Get("author_id")
+	var chirps []Chirp 
+	if authorIDParam == "" {
 
-	chirps := make([]Chirp, 0, len(dbChirps))
-	for _, dbChirp := range dbChirps {
-		chirps = append(chirps, Chirp{
-			ID: dbChirp.ID, 
-			CreatedAt: 	dbChirp.CreatedAt,
-			UpdatedAt: 	dbChirp.UpdatedAt,
-			Body: 		dbChirp.Body,
-			UserID: 	dbChirp.UserID,
-		})
+		dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+		if err != nil {
+			utils.RespondWithError(w, http.StatusInternalServerError, "Could not get Chirps")
+			return
+		}
+
+		chirps = make([]Chirp, 0, len(dbChirps))
+		for _, dbChirp := range dbChirps {
+			chirps = append(chirps, Chirp{
+				ID:        dbChirp.ID,
+				CreatedAt: dbChirp.CreatedAt,
+				UpdatedAt: dbChirp.UpdatedAt,
+				Body:      dbChirp.Body,
+				UserID:    dbChirp.UserID,
+			})
+		}
+	} else {
+		authorID, err := uuid.Parse(authorIDParam)
+		if err != nil {
+			utils.RespondWithError(w, http.StatusInternalServerError, "Couldn't parse author id")
+			return
+		}
+
+		dbChirps, err := cfg.dbQueries.GetAuthorChirps(r.Context(), authorID)
+		if err != nil {
+			utils.RespondWithError(w, http.StatusInternalServerError, "Couldn't get the author's chirps")
+			return
+		}
+		chirps = make([]Chirp, 0, len(dbChirps))
+		for _, dbChirp := range dbChirps {
+			chirps = append(chirps, Chirp{
+				ID:        dbChirp.ID,
+				CreatedAt: dbChirp.CreatedAt,
+				UpdatedAt: dbChirp.UpdatedAt,
+				Body:      dbChirp.Body,
+				UserID:    dbChirp.UserID,
+			})
+		}
 	}
 	
+	if sortParam == "asc" {
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)	
+		})
+	} else if sortParam == "desc" {
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+		})
+	}
 	utils.RespondWithJSON(w, http.StatusOK, chirps)
 }
 
@@ -115,19 +153,19 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	var params struct {
-		Body	string		`json:"body"`
+		Body string `json:"body"`
 	}
 
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "User does not possess a login token")
-		return 
+		return
 	}
 
 	tokenUUID, err := auth.ValidateJWT(token, cfg.secret)
 	if err != nil {
 		utils.RespondWithError(w, http.StatusUnauthorized, "401 Unauthorized")
-		return 
+		return
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
@@ -137,28 +175,28 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 
 	if len(params.Body) > 140 {
 		utils.RespondWithError(w, http.StatusBadRequest, "Chirp is too long")
-		return 
+		return
 	}
 
 	cleanChirp := cleanChirp(params.Body)
 
 	chirp, err := cfg.dbQueries.CreateChirps(r.Context(), database.CreateChirpsParams{
-		Body:	cleanChirp,
-		UserID:	tokenUUID,
+		Body:   cleanChirp,
+		UserID: tokenUUID,
 	})
 	if err != nil {
 		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Could not create the chirp: %s", err))
-		return 
+		return
 	}
 
-	utils.RespondWithJSON(w, http.StatusCreated, chirp)	
+	utils.RespondWithJSON(w, http.StatusCreated, chirp)
 }
 
 func cleanChirp(chirp string) string {
 	badwords := map[string]bool{
-		"kerfuffle": 	true,
-		"sharbert":		true,
-		"fornax":		true,
+		"kerfuffle": true,
+		"sharbert":  true,
+		"fornax":    true,
 	}
 
 	words := strings.Fields(chirp)
