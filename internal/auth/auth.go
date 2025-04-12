@@ -14,6 +14,25 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("No Authorization header")
+	}
+
+	const APIPrefix = "ApiKey "
+	if !strings.HasPrefix(authHeader, APIPrefix) {
+		return "", errors.New("ApiKey not provided")
+	}
+
+	apiKey := strings.TrimSpace(authHeader[len(APIPrefix):])
+	if apiKey == "" {
+		return "", errors.New("Apkey is missing")
+	}
+
+	return apiKey, nil
+}
+
 func MakeRefreshToken() (string, error) {
 	key := make([]byte, 32)
 

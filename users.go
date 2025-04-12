@@ -16,6 +16,49 @@ type User struct {
 	CreatedAt	time.Time 	`json:"created_at"`
 	UpdatedAt	time.Time 	`json:"updated_at"`
 	Email		string		`json:"email"`
+	IsRed		bool		`json:"is_chirpy_red"`
+}
+
+func (cfg *apiConfig) handlerUpgradeUser(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return 
+	}
+
+	if apiKey != cfg.polkaKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		return 
+	}
+	
+	var params struct {
+		Event	string	`json:"event"`
+		Data	struct{
+			UserID	string	`json:"user_id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return 
+	}
+	if params.Event != "user.upgraded" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	userID, err := uuid.Parse(params.Data.UserID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return 
+	}
+	if err := cfg.dbQueries.UpgradeUser(r.Context(), userID); err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return 
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +108,7 @@ func (cfg *apiConfig) handlerUpdateUser(w http.ResponseWriter, r *http.Request) 
 		CreatedAt:	dbUser.CreatedAt,		
 		UpdatedAt:	dbUser.UpdatedAt,	
 		Email:		dbUser.Email,		
+		IsRed: 		dbUser.IsChirpyRed,
 	}
 	utils.RespondWithJSON(w, http.StatusOK, response)
 }
@@ -168,6 +212,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt		time.Time	`json:"created_at"`
 		UpdatedAt		time.Time	`json:"updated_at"`
 		Email			string		`json:"email"`
+		IsRed			bool		`json:"is_chirpy_red"`
 		Token			string		`json:"token"`
 		RefreshToken	string		`json:"refresh_token"`
 	}{
@@ -175,6 +220,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:		dbUser.CreatedAt,
 		UpdatedAt:		dbUser.UpdatedAt,
 		Email:			dbUser.Email,
+		IsRed:			dbUser.IsChirpyRed,
 		Token:			token,
 		RefreshToken: 	refreshToken,
 	}
@@ -217,6 +263,7 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) 
 		CreatedAt:	user.CreatedAt,
 		UpdatedAt: 	user.UpdatedAt,
 		Email:		user.Email,
+		IsRed: 		user.IsChirpyRed,
 	}
 
 	utils.RespondWithJSON(w, http.StatusCreated, response)

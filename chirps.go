@@ -100,10 +100,10 @@ func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request
 	for _, dbChirp := range dbChirps {
 		chirps = append(chirps, Chirp{
 			ID: dbChirp.ID, 
-			CreatedAt: dbChirp.CreatedAt,
-			UpdatedAt: dbChirp.UpdatedAt,
-			Body: dbChirp.Body,
-			UserID: dbChirp.UserID,
+			CreatedAt: 	dbChirp.CreatedAt,
+			UpdatedAt: 	dbChirp.UpdatedAt,
+			Body: 		dbChirp.Body,
+			UserID: 	dbChirp.UserID,
 		})
 	}
 	
